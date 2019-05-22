@@ -1,35 +1,56 @@
 \input texinfo  @c -*-texinfo-*-
 
-@setfilename build.texi
-@settitle Building HPCToolkit with Spack
+@setfilename install.texi
+@settitle Installing HPCToolkit with Spack
 
-@section Building HPCToolkit with Spack
+@ifhtml
+@contents
+@end ifhtml
 
-@subsection Introduction
+@section Introduction
 
-These notes describe how to build HPCToolkit and its prerequisites
-with Spack instead of hpctoolkit-externals.  The transition from
-externals to spack will be gradual in the sense that both will
-continue to work for some time.  However, going forward, we will stop
-updating externals and instead rely on spack for newer versions of
-packages.
+These notes describe how to build and install HPCToolkit and hpcviewer
+and their prerequisites with Spack.  HPCToolkit proper (hpcrun,
+hpcstruct and hpcprof) is used to measure and analyze an application's
+performance and then produce a database for hpcviewer.  HPCToolkit is
+supported on the following platforms.
 
-These notes are written for someone who has built hpctoolkit before
-and now wants to use spack to build hpctoolkit's dependencies.  If you
-are a more experienced spack user, especially if you want to use spack
-to build hpctoolkit plus several other packages, then you will want to
-adapt these directions to your own needs.
+@enumerate
+@item
+Linux (64-bit) on x86_64, big and little-endian powerpc (power7, 8 and
+9) and ARM (aarch64).
 
-It is possible to use spack to install all of hpctoolkit (except the
-viewers) or build just the prereqs and then build hpctoolkit with the
-traditional @code{configure ; make ; make install}.  Developers will
-probably want to clone the hpctoolkit repository and then run
-@code{configure} and @code{make} manually, but both methods are
-supported.
+@item
+Cray XT/XE/XK/XC on x86_64 and Compute Node Linux.
 
-Note: building HPCToolkit with spack for Cray or Blue Gene/Q systems
-is now supported, but both the procedure and the directions are still
-somewhat in flux.
+@item
+IBM Blue Gene/Q on ppc64.
+@end enumerate
+
+@noindent
+We provide binary distributions for hpcviewer and hpctraceviewer on
+Linux (x86_64 and powerpc), Windows and MacOS.  HPCToolkit databases are
+platform-independent and it is common to run hpcrun on one machine and
+then view the results on another machine.
+
+We build HPCToolkit and its prerequisite libraries from source.
+HPCToolkit has some 15-20 prerequisites and we now use spack to build
+them.  It is possible to use spack to install all of hpctoolkit or
+build just the prerequisites and then build hpctoolkit with the
+traditional @code{configure ; make ; make install} method from
+autotools.  Developers will probably want to run @code{configure} and
+@code{make} manually, but both methods are supported.
+
+Note: the old method of using hpctoolkit-externals to build the
+prerequisite libraries is now superseded by spack.  Although externals
+will continue to work for a while, we have stopped updating externals
+and now add newer versions of packages only in spack.
+
+These notes are written mostly from the view of using spack to build
+hpctoolkit and its dependencies.  If you are a more experienced spack
+user, especially if you want to use spack to build hpctoolkit plus
+several other packages, then you will want to adapt these directions to
+your own needs.
 
 Spack documentation is available at:
 
@@ -39,11 +60,46 @@ Spack documentation is available at:
 
 @c ------------------------------------------------------------
 
-@subsection Clone Spack and HPCToolkit
+@section Prerequisites
 
-Spack is available via git clone from github.  This includes the core
-spack machinery and recipes for building approximately 3,000 packages
-(and growing).  You also need to clone HPCToolkit for the
+Building HPCToolkit requires the following prerequisites.
+
+@enumerate
+@item
+The GNU gcc and g++ compilers version 4.8 or later and preferably 5.x or
+later.  On systems with older compilers, you can use spack to build a
+later version of gcc.
+
+@item
+Basic build tools: make, ld, ar, objcopy, nm, etc, and shell utilities:
+bash, sed, awk, grep, etc.  Most Linux systems have these tools, or else
+you couldn't compile anything.
+
+@item
+Cmake version 3.4 or later, perl version 5.x, and python version 2.7 or
+3.4 or later.  On systems that are missing these tools or have versions
+that are too old, you can use spack to build a later version.
+
+@item
+Git and curl for downloading files.
+
+@item
+(optional) Environment (TCL) or LUA (Lmod) modules, if you want to make
+HPCToolkit available as a module.  Again, spack can install these
+packages if they are missing from your system.
+@end enumerate
+
+@noindent
+Hpcviewer and hpctraceviewer require Java version 8.  On Linux, the
+viewers also require GTK+ version 2.x.
+
+@c ------------------------------------------------------------
+
+@section Clone Spack and HPCToolkit
+
+Spack is available via git clone from GitHub.  This includes the core
+spack machinery and recipes for building more than 3,000 packages (and
+growing).  You should also clone HPCToolkit for the
 @code{packages.yaml} file which is used to configure the spack build.
 
 @example
@@ -68,7 +124,7 @@ support for modules built by spack.
 
 @c ------------------------------------------------------------
 
-@subsection Config.yaml
+@section Config.yaml
 
 @code{config.yaml} is the top-level spack config file.  This specifies
 the directory layout for installed files and the top-level spack
@@ -77,8 +133,13 @@ set for your local system.
 
 @enumerate
 @item
-@code{install_tree} -- by default, spack installs its packages inside
-the spack repository at @code{spack/opt/spack}.  If you want to use
+@code{install_tree} -- by default, spack installs packages inside the
+spack repository at @code{spack/opt/spack}.  If you want to use another
+location, then set this.
+
+@item
+@code{module_roots} -- by default, spack installs module files inside
+the spack repository at @code{spack/share/spack}.  If you want to use
 another location, then set this.
 
 @item
@@ -89,9 +150,8 @@ number.  (There is precedent.)
 @end enumerate
 
 @noindent
-There are also parameters for the locations of the module files, the
-build directories, the cache of downloaded tar files, etc, which you may
-wish to set.
+There are also parameters for the locations of the build directories,
+the cache of downloaded tar files, etc, which you may wish to set.
 
 The default @code{config.yaml} file is in the spack repository at
 @code{spack/etc/spack/defaults}.  The simplest solution is to copy this
@@ -137,21 +197,24 @@ See the spack docs on `Configuration Files' and `Basic Settings'.
 
 @c ------------------------------------------------------------
 
-@subsection Packages.yaml
+@section Packages.yaml
 
 The @code{packages.yaml} file specifies the versions and variants for
-the packages that spack installs and serves as a common reference point
-for HPCToolkit's prerequisites.  This file also specifies the paths or
-modules for system build tools (cmake, python, etc) to avoid rebuilding
-them.  Put this file in the same directory as @code{config.yaml}.
+the packages that spack installs and serves as a common reference
+point for HPCToolkit's prerequisites.  This file also specifies the
+paths or modules for system build tools (cmake, python, etc) to avoid
+rebuilding them.  Put this file in the same directory as
+@code{config.yaml}.  A sample @code{packages.yaml} file is available
+in the @code{spack} directory of the hpctoolkit repository.
 
 There are two main sections to @code{packages.yaml}.  The first
-specifies the versions and variants for hpctoolkit's prereqs.  In most
-cases, the default variants for the latest versions (plus any
-constraints from hpctoolkit's @code{package.py} file) should work, but
-this is not guaranteed.
+specifies the versions and variants for hpctoolkit's prereqs.  By
+default, spack will choose the latest version of each package (plus
+any constraints from hpctoolkit's @code{package.py} file).  In most
+cases, this will work, but not always.  If you need to specify a
+different version or variant, then set this in @code{packages.yaml}.
 
-A technical note: versions and variants specified in hpctoolkit's
+Note: the versions and variants specified in hpctoolkit's
 @code{package.py} file are hard constraints and should not be changed.
 Variants in @code{packages.yaml} are preferences that may be modified
 for your local system.  (But don't report a bug until you have first
@@ -169,21 +232,20 @@ no effect on non-x86 systems.)
 
 @item
 @code{libmonitor} -- on Blue Gene/Q, add @code{+bgq}.
-
 @end enumerate
 
 @noindent
 The second section in @code{packages.yaml} specifies a path or module
 for system build tools.  Building hpctoolkit's prerequisites requires
-cmake 3.0 or later, perl 5.x and python 2.7.x or 3.x.  There are three
-ways to satisfy these requirements: a system installed version (eg,
-/usr), a module or build from scratch.
+cmake 3.4 or later, perl 5.x and python 2.7 or 3.4 or later.  There are
+three ways to satisfy these requirements: a system installed version
+(eg, /usr), a pre-built module or build from scratch.
 
-By default, spack will rebuild these from scratch, even if your version
-is perfectly fine.  If you already have an installed version and prefer
-to use that instead, then you can specify this in @code{packages.yaml}.
-Note that these are only build tools.  Hpctoolkit does not link with any
-of their libraries.
+By default, spack will rebuild these from scratch, even if your local
+version is perfectly fine.  If you already have an installed version
+and prefer to use that instead, then you can specify this in
+@code{packages.yaml}.  Note that these are only build tools.
+Hpctoolkit does not link with any of their libraries.
 
 For example, this entry says that cmake 3.7.2 is available from module
 @code{CMake/3.7.2} and that spack should use this instead of building
@@ -220,7 +282,7 @@ Dependencies'.
 
 @c ------------------------------------------------------------
 
-@subsection Compilers and compilers.yaml
+@section Compilers and compilers.yaml
 
 Building HPCToolkit requires GNU gcc/g++ at a minimum version 4.8 and
 preferably 5.x or later.  By default, spack uses the latest available
@@ -244,20 +306,20 @@ For example, on one power8 system running RedHat 7.3, /usr/bin/gcc is
 version 4.8.5, but gcc 6.4.0 is available as module @code{GCC/6.4.0}.
 
 @example
-$ module load GCC/6.4.0
+module load GCC/6.4.0
 
-$ spack compiler find
+spack compiler find
 ==> Added 2 new compilers to /home/krentel/.spack/linux/compilers.yaml
     gcc@@6.4.0  gcc@@4.8.5
 ==> Compilers are defined in the following files:
     /home/krentel/.spack/linux/compilers.yaml
 
-$ spack compiler list
+spack compiler list
 ==> Available compilers
 -- gcc rhel7-ppc64le --------------------------------------------
 gcc@@6.4.0  gcc@@4.8.5
 
-$ spack compiler info gcc@@6.4
+spack compiler info gcc@@6.4
 gcc@@6.4.0:
     paths:
         cc = /opt/apps/software/Core/GCCcore/6.4.0/bin/gcc
@@ -303,7 +365,7 @@ See the spack docs on `Compiler Configuration'.
 
 @c ------------------------------------------------------------
 
-@subsection Spack Install
+@section Spack Install
 
 First, make sure that you have your @code{config.yaml},
 @code{packages.yaml} and @code{compilers.yaml} files in place and
@@ -365,9 +427,9 @@ a @code{--with-pkg} option.
 
 @c ------------------------------------------------------------
 
-@subsection Advanced Options
+@section Advanced Options
 
-@subsubsection MPI
+@subsection MPI
 
 HPCToolkit always supports profiling MPI applications.  For
 hpctoolkit, the spack variant @code{+mpi} is for building hpcprof-mpi,
@@ -380,13 +442,13 @@ and add this to @code{packages.yaml}.  The MPI module should be built
 with the same version of GNU gcc/g++ used to build hpctoolkit (to keep
 the C++ libraries in sync).
 
-@subsubsection PAPI vs Perfmon
+@subsection PAPI vs Perfmon
 
 HPCToolkit can access the Hardware Performance Counters with either
 PAPI or Perfmon (libpfm4).  By default, the hpctoolkit package uses
 perfmon.  If you want to use PAPI instead, then build hpctoolkit with
-@code{+papi}.  However, you can't use both due to a conflict in their
-header files.
+@code{+papi}.  However, you can't use both due to a potential conflict
+in their header files.
 
 PAPI runs on top of the perfmon library, but PAPI uses its own,
 internal copy of perfmon.  Prior to version 5.6.0, PAPI did not
@@ -394,21 +456,22 @@ install the perfmon header files, so it was impossible to access the
 perfmon events through PAPI.
 
 However, starting with version 5.6.0, PAPI now installs both the
-perfmon library and its header files.  Hpctoolkit will automatically
-detect this, so if you build hpctoolkit with a recent enough version
-of PAPI, then both the PAPI and perfmon interfaces will be available.
+perfmon library and its header files.  Hpctoolkit configure will
+automatically detect this, so if you build hpctoolkit with a recent
+enough version of PAPI, then both the PAPI and perfmon interfaces will
+be available.
 
 @c ------------------------------------------------------------
 
-@subsection Platform Specific Notes
+@section Platform Specific Notes
 
-@subsubsection Blue Gene
+@subsection Blue Gene
 
 Blue Gene systems are being phased out, without a next generation
-replacement, but are still supported by hpctoolkit (for now).  Blue Gene
-normally comes with a Red Hat Enterprise Linux (RHEL) 6.x front end and
-the GNU gcc/g++ 4.4 compilers with is too old to support the latest
-version of hpctoolkit.
+replacement, but are still supported by hpctoolkit (for now).  Blue
+Gene normally comes with a Red Hat Enterprise Linux (RHEL) 6.x front
+end and the GNU gcc/g++ 4.4 compilers with are too old to support the
+latest version of hpctoolkit.
 
 Spack supports two architecture types on Blue Gene.  The front-end arch
 is @code{bgq-rhel6-ppc64} and the back-end arch is @code{bgq-cnk-ppc64}.
@@ -440,20 +503,15 @@ spack install hpctoolkit +bgq
 
 @noindent
 The advanced method involves building a new compiler (gcc 4.8 or 4.9)
-but allows using Dyninst 10.x.  This method also requires TCL or Lmod
-modules.  Currently, the vulcan system at LLNL provides modules, but
-mira/cetus/vesta at ANL do not.
-
-The advanced method also requires an MPI C++ compiler built for a later
-version of g++.  Vulcan at LLNL has a dotkit module for bggcc-4.7.2
-which seems to work.  Mira and vesta at ANL have softenv modules for
-+mpiwrapper-gcc and +bgqtoolchain-gcc484.
+but allows using Dyninst 10.x.  This method requires TCL or Lmod
+modules and an MPI C++ compiler built for a compatible version of g++.
+Mira and vesta at ANL have softenv modules for +mpiwrapper-gcc and
++bgqtoolchain-gcc484 but don't provide TCL or Lmod modules.
 
 First, use spack to build a new compiler.  Dyninst 10.x requires
 gcc@w{ }4.8 or later, but libmonitor requires the true back-end
-@code{powerpc64-bgq-linux-gcc} compiler which is version 4.4.  We settle
-on gcc 4.8.5 as a compromise between these two constraints.
-
+@code{powerpc64-bgq-linux-gcc} compiler which is version 4.4.  We
+settle on gcc 4.8.5 as a compromise between these two constraints.
 Edit @code{config.yaml} to set @code{module_roots} to a directory in
 which to install the modules and then build gcc.
 
@@ -487,7 +545,7 @@ necessary.
 
 Finally, use the new compiler to build hpctoolkit with the new compiler.
 If you have modified the dyninst entry in @code{packages.yaml}, then
-reset the dyninst version to 10.0.0 (or later).
+reset the dyninst version to 10.1.0 (or later).
 
 @example
 spack install hpctoolkit +bgq %gcc@@4.8.5
@@ -501,8 +559,7 @@ csh script in the @code{Modules/init} directory to add the
 
 @example
 spack bootstrap
-cd /path/to/environment-modules-3.2.10-dkg2omyae7lhprqyoq5vvras5ifltzj5
-cd Modules/init
+cd /path/to/environment-modules-4.2.4-rwtvlanuss35fxd3xuyldbfopt2m4ecs/init
 (bash)  . ./bash
 (csh)   source ./csh
 @end example
@@ -533,12 +590,12 @@ configure  \
 
 @c ------------------------------------------------------------
 
-@subsubsection Cray
+@subsection Cray
 
-Cray systems, like Blue Gene, have separate front-end and back-end
-architecture types.  For example, on theta at ANL, the front end arch
-is @code{cray-sles12-x86_64} (SuSE Linux for x86_64) and the back end
-is @code{cray-cnl6-mic_knl} (Compute Node Linux for KNL).
+Cray systems, like Blue Gene, have separate front and back-end
+architecture types.  For example, on theta at ANL, the front-end arch
+is @code{cray-sles12-x86_64} (SuSE Linux version 12 for x86_64) and
+the back-end is @code{cray-cnl6-mic_knl} (Compute Node Linux for KNL).
 
 Hpctoolkit needs to be built with the GNU Programming Environment and
 the front-end x86_64 compilers, plus the @code{CC} MPI C++ wrapper.
@@ -633,5 +690,109 @@ configure  \
     --enable-all-static  \
     MPICXX=CC
 @end example
+
+@c ------------------------------------------------------------
+
+@section Hpcviewer and Hpctraceviewer
+
+We provide binary distributions for hpcviewer and hpctraceviewer on
+Linux (x86_64 and powerpc), Windows and MacOS.  HPCToolkit databases are
+platform-independent and it is common to run hpcrun on one machine and
+then view the results on another machine.
+
+All versions of the viewers require Java version 8 (not 9 or later).
+The Linux versions also require GTK+ version 2.x.
+
+@subsection Spack Install
+
+The spack install is available on Linux x86_64, big-endian power7
+(ppc64) and little-endian power8 and 9 (ppc64le).  This installs both
+hpcviewer and hpctraceviewer and includes the Java 8 prerequisite.
+
+On x86_64, use the following command.  Hpcviewer requires jdk 1.8, but
+the latest 1.8 version, 1.8.0_202 does not download properly due to
+licensing issues, however 1.8.0_141-b15 seems to work.
+
+@example
+spack install hpcviewer ^jdk@@1.8.0_141-b15
+@end example
+
+@noindent
+On powerpc (big and little-endian), use the IBM version of Java.
+
+@example
+spack install hpcviewer ^ibm-java
+@end example
+
+@subsection Manual Install
+
+Binary distributions of the viewers for all supported platforms are
+available at:
+
+@example
+@uref{http://hpctoolkit.org/download/hpcviewer}
+@end example
+
+@noindent
+On Linux, download the @code{linux.gtk} versions of hpcviewer and
+hpctraceviewer, unpack the tar files and run the install scripts (for
+both viewers) with the path to the desired install prefix.
+
+@example
+./install /path/to/install/directory
+@end example
+
+@noindent
+On Windows and MacOS, download the @code{win32} or @code{macosx.cocoa}
+versions and unpack the zip files in the desired directory.  Due to
+Apple's security precautions, on MacOS, you will need to use curl or
+wget instead of a web browser.
+
+@c ------------------------------------------------------------
+
+@section Common Problems
+
+@subsection Unable to fetch tar file
+
+Spack is somewhat fragile for how it downloads tar files and will
+often fail for transitory network problems.  This is especially true
+for packages with many dependencies.  For example:
+
+@example
+==> Installing m4
+==> Searching for binary cache of m4
+==> No binary for m4 found: installing from source
+curl: (6) Could not resolve host: ftp.wayne.edu; Name or service not known
+==> Fetching https://ftpmirror.gnu.org/m4/m4-1.4.18.tar.gz
+==> Fetching from https://ftpmirror.gnu.org/m4/m4-1.4.18.tar.gz failed.
+==> Error: FetchError: All fetchers failed for m4-1.4.18-vorbvkcjfac43b7vuswsvnm6xe7w7or5
+@end example
+
+@noindent
+There are two workarounds.  First, assuming the problem is temporary,
+simply wait 10 minutes or an hour and try again.
+
+Second, you could set up a spack mirror.  A mirror allows you to
+download a tar file ahead of time and put it in a directory where
+spack can find it without having to fetch it over a network.  A mirror
+is also useful for files with license issues (eg, jdk 1.8.0_202 as
+above), or on a secure machine without direct access to the internet.
+See:
+
+@example
+@uref{https://spack.readthedocs.io/en/latest/mirrors.html}
+@end example
+
+@subsection New releases break the build
+
+Normally, HPCToolkit should build and work correctly with the latest
+version for all of its dependencies.  But sometimes a new release will
+change something and break the build.  This has happened a couple times
+where a new release of Boost has broken the build for Dyninst.  Or,
+maybe the latest version of gcc/g++ disallows some usage and breaks the
+build.
+
+The solution is to use @code{packages.yaml} to specify an earlier
+version until the rest of the code adapts to the change.
 
 @bye
