@@ -1366,12 +1366,10 @@ LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIBTOOL_DEPS = @LIBTOOL_DEPS@
 LIBUNWIND_COPY = @LIBUNWIND_COPY@
-LIBUNWIND_CPPFLAGS_DYN = @LIBUNWIND_CPPFLAGS_DYN@
-LIBUNWIND_CPPFLAGS_STAT = @LIBUNWIND_CPPFLAGS_STAT@
 LIBUNWIND_IFLAGS = @LIBUNWIND_IFLAGS@
 LIBUNWIND_LDFLAGS_DYN = @LIBUNWIND_LDFLAGS_DYN@
 LIBUNWIND_LDFLAGS_STAT = @LIBUNWIND_LDFLAGS_STAT@
-LIBUNWIND_LIB = @LIBUNWIND_LIB@
+LIBUNWIND_LIB_DIR = @LIBUNWIND_LIB_DIR@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
@@ -1876,17 +1874,17 @@ libhpctoolkit_a_SOURCES = \
 #-----------------------------------------------------------
 # cppflags
 #-----------------------------------------------------------
-libhpcrun_la_CPPFLAGS = $(MY_CPP_DEFINES) $(LIBUNWIND_CPPFLAGS_DYN) \
-	$(MY_INCLUDE_DIRS) $(am__append_18) $(am__append_27) \
-	$(am__append_40) $(am__append_53) $(am__append_69) \
-	$(am__append_82) $(am__append_94) $(am__append_99) \
-	$(am__append_101) $(am__append_109) $(am__append_112) \
-	$(am__append_115) $(am__append_119) $(UNW_INCLUDE_DIRS)
+libhpcrun_la_CPPFLAGS = $(MY_CPP_DEFINES) $(MY_INCLUDE_DIRS) \
+	$(am__append_18) $(am__append_27) $(am__append_40) \
+	$(am__append_53) $(am__append_69) $(am__append_82) \
+	$(am__append_94) $(am__append_99) $(am__append_101) \
+	$(am__append_109) $(am__append_112) $(am__append_115) \
+	$(am__append_119) $(UNW_INCLUDE_DIRS)
 libhpcrun_o_CPPFLAGS = -DHPCRUN_STATIC_LINK $(MY_CPP_DEFINES) \
-	$(LIBUNWIND_CPPFLAGS_STAT) $(MY_INCLUDE_DIRS) $(am__append_19) \
-	$(am__append_28) $(am__append_41) $(am__append_54) \
-	$(am__append_70) $(am__append_83) $(am__append_104) \
-	$(am__append_110) $(am__append_113) $(UNW_INCLUDE_DIRS)
+	$(MY_INCLUDE_DIRS) $(am__append_19) $(am__append_28) \
+	$(am__append_41) $(am__append_54) $(am__append_70) \
+	$(am__append_83) $(am__append_104) $(am__append_110) \
+	$(am__append_113) $(UNW_INCLUDE_DIRS)
 libhpcrun_wrap_a_CPPFLAGS = \
 	-DHPCRUN_STATIC_LINK		\
 	$(MY_CPP_DEFINES)		\

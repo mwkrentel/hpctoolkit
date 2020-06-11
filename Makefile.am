@@ -146,7 +146,7 @@ install-exec-local:
 	@$(call copy-libs,$(LIBDWARF_COPY),$(LIBDWARF_LIB),libdwarf*so*)
 	@$(call copy-libs,$(LIBMONITOR_COPY),$(LIBMONITOR_LIB),libmonitor*)
 	@$(call copy-libs,$(PERFMON_COPY),$(PERFMON_LIB),libpfm.so*)
-	@$(call copy-libs,$(LIBUNWIND_COPY),$(LIBUNWIND_LIB),libunwind.so*)
+	@$(call copy-libs,$(LIBUNWIND_COPY),$(LIBUNWIND_LIB_DIR),libunwind.so*)
 	@$(call copy-libs,$(LZMA_COPY),$(LZMA_LIB),liblzma.so*)
 	@$(call copy-libs,$(LZMA_COPY),$(LZMA_LIB),liblzma.a*)
 	@$(call copy-libs,$(TBB_COPY),$(TBB_LIB_DIR),libtbb.so*)

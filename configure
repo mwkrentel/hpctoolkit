@@ -763,18 +763,14 @@ LZMA_LDFLAGS_STAT
 LZMA_LDFLAGS_DYN
 UNW_LIBUNW_FALSE
 UNW_LIBUNW_TRUE
-UNW_MIPS_FALSE
-UNW_MIPS_TRUE
 UNW_PPC64_FALSE
 UNW_PPC64_TRUE
 UNW_X86_FALSE
 UNW_X86_TRUE
-LIBUNWIND_LIB
+LIBUNWIND_LIB_DIR
 LIBUNWIND_COPY
 LIBUNWIND_LDFLAGS_STAT
 LIBUNWIND_LDFLAGS_DYN
-LIBUNWIND_CPPFLAGS_STAT
-LIBUNWIND_CPPFLAGS_DYN
 LIBUNWIND_IFLAGS
 LIBMONITOR_WRAP_NAMES
 LIBMONITOR_RUN_DIR
@@ -1023,7 +1019,6 @@ with_libdwarf
 with_libiberty
 with_libmonitor
 with_libunwind
-enable_libunwind_primary
 with_lzma
 with_mbedtls
 with_papi
@@ -1724,9 +1719,6 @@ Optional Features:
                           spack build)
   --enable-bgq            configure for blue gene/q back end, disable posix
                           timers and perf events (default auto-detect)
-  --enable-libunwind-primary
-                          use libunwind as primary unwinder for hpcrun
-                          (default no)
   --enable-force-papi     force using both papi and perf events, if configure
                           can't verify that papi and perfmon match
   --enable-papi-c         use component papi, if available (default yes)
@@ -20912,26 +20904,33 @@ echo "$LIBMONITOR_WRAP_NAMES" >&5
 
 
 #-------------------------------------------------
-# Option: --with-libunwind=PATH, --enable-libunwind-primary
+# Option: --with-libunwind=PATH
 #-------------------------------------------------
+#
+# Now required on all platforms for hpcrun.
+# Test for three things:
+#
+#  1. libunwind exists (headers + .so) for dynamic case.
+#  2. static archive libunwind.a exists for static case.
+#  3. archive compiled with -fPIC for link into libhpcrun.so.
+#
+# Note: we only use local (first-party) unwinding, so we only need
+# libunwind.so, not libunwind-PLATFORM.so, but code must be compiled
+# with UNW_LOCAL_ONLY.
+#
 
-# Libunwind can be the primary unwinder (any platform), the secondary
-# unwinder or not used at all.  So, keep it optional and test static
-# and dynamic versions separately.  But if libunwind is the primary
-# unwinder, then can't build hpcrun or hpclink without it.
-
-LIBUNWIND_STAT=no
+LIBUNWIND="$default_libunwind_prefix"
 
 LIBUNWIND_IFLAGS=
-LIBUNWIND_CPPFLAGS_DYN=
-LIBUNWIND_CPPFLAGS_STAT=
 LIBUNWIND_LDFLAGS_DYN=
 LIBUNWIND_LDFLAGS_STAT=
 
 LIBUNWIND_COPY=no
-LIBUNWIND_LIB=
+LIBUNWIND_LIB_DIR=
 
-LIBUNWIND="$default_libunwind_prefix"
+libunwind_exists=no
+libunwind_static=no
+libunwind_fpic=no
 
 
 # Check whether --with-libunwind was given.
@@ -20940,21 +20939,12 @@ if test "${with_libunwind+set}" = set; then :
 fi
 
 
-# Check whether --enable-libunwind-primary was given.
-if test "${enable_libunwind_primary+set}" = set; then :
-  enableval=$enable_libunwind_primary;
-else
-  enable_libunwind_primary=no
-fi
-
-
-# If libunwind is available, require dynamic (.so) version, and make
-# static (.a) optional.  On powerpc, libunwind installs libs into
-# lib64, so test for multilib here.
-
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libunwind" >&5
 $as_echo_n "checking for libunwind... " >&6; }
 
+#
+# Test if libunwind.h, libunwind.so and libunwind.a exist.
+#
 case "$LIBUNWIND" in
   /* )
     if test ! -f "${LIBUNWIND}/include/libunwind.h" ; then
@@ -20963,19 +20953,21 @@ case "$LIBUNWIND" in
     LIBUNWIND_IFLAGS="-I${LIBUNWIND}/include"
 
     for lib in $multilib_path ; do
-      unw_libdir="${LIBUNWIND}/$lib"
-      if test -f "$unw_libdir/libunwind.so" ; then
-        LIBUNWIND_LDFLAGS_DYN="-L${unw_libdir} -lunwind"
+      unwind_libdir="${LIBUNWIND}/$lib"
+      if test -f "${unwind_libdir}/libunwind.so" ; then
+        LIBUNWIND_LDFLAGS_DYN="-L${unwind_libdir} -lunwind"
     	LIBUNWIND_COPY=yes
-	LIBUNWIND_LIB="$unw_libdir"
-	if test -f "${unw_libdir}/libunwind.a" ; then
-	  LIBUNWIND_STAT=yes
-      	  LIBUNWIND_LDFLAGS_STAT="${unw_libdir}/libunwind.a"
+	LIBUNWIND_LIB_DIR="$unwind_libdir"
+	libunwind_exists=yes
+
+	if test -f "${unwind_libdir}/libunwind.a" ; then
+      	  LIBUNWIND_LDFLAGS_STAT="${unwind_libdir}/libunwind.a"
+	  libunwind_static=yes
 	fi
 	break
       fi
     done
-    if test "x$LIBUNWIND_LIB" = x ; then
+    if test "$libunwind_exists" != yes ; then
       as_fn_error $? "invalid libunwind directory: $LIBUNWIND" "$LINENO" 5
     fi
     num_pkgs=`expr 1 + $num_pkgs`
@@ -20989,59 +20981,77 @@ esac
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $LIBUNWIND" >&5
 $as_echo "$LIBUNWIND" >&6; }
-{ $as_echo "$as_me:${as_lineno-$LINENO}: libunwind static: $LIBUNWIND_STAT" >&5
-$as_echo "$as_me: libunwind static: $LIBUNWIND_STAT" >&6;}
+{ $as_echo "$as_me:${as_lineno-$LINENO}: libunwind.a static archive: $libunwind_static" >&5
+$as_echo "$as_me: libunwind.a static archive: $libunwind_static" >&6;}
 
-case "$enable_libunwind_primary" in
-  yes | Yes | YES )
-    if test "$LIBUNWIND" = no ; then
-      as_fn_error $? "enable libunwind primary requires libunwind" "$LINENO" 5
-    fi
-    UNWINDER=libunw
-    ;;
-esac
+#
+# Test if libunwind.a was compiled with -fPIC.
+#
+if test "x$libunwind_static" = xyes
+then
+  ORIG_CFLAGS="$CFLAGS"
+  ORIG_LIBS="$LIBS"
+  CFLAGS="-shared -fPIC $LIBUNWIND_IFLAGS"
+  LIBS="$LIBUNWIND_LDFLAGS_STAT"
 
-no_unwind_for_hpcrun=no
-no_unwind_for_hpclink=no
-unwinder_mesg="$UNWINDER"
+  ac_ext=c
+ac_cpp='$CPP $CPPFLAGS'
+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
-if test "$UNWINDER" = libunw ; then
-  #
-  # libunwind is the primary unwinder.  must have libunwind or else
-  # can't build hpcrun or hpclink.  don't need CPPFLAGS in this case.
-  #
-  if test "$LIBUNWIND" = no ; then
-    no_unwind_for_hpcrun=yes
-  fi
-  if test "$LIBUNWIND_STAT" = no ; then
-    no_unwind_for_hpclink=yes
-  fi
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+#define UNW_LOCAL_ONLY
+#include <sys/types.h>
+#include <libunwind.h>
+unw_word_t
+my_get_ip_addr(unw_context_t *context)
+{
+  unw_cursor_t cursor;
+  unw_word_t ip;
+  unw_init_local(&cursor, context);
+  unw_step(&cursor);
+  unw_get_reg(&cursor, UNW_REG_IP, &ip);
+  return ip;
+}
+
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  libunwind_fpic=yes
 else
-  #
-  # libunwind is the secondary unwinder or not available.  can build
-  # hpcrun without libunwind, but set CPPFLAGS when available.
-  #
-  if test "$LIBUNWIND" != no ; then
-    LIBUNWIND_CPPFLAGS_DYN='-DUSE_LIBUNWIND'
-    unwinder_mesg="$UNWINDER + libunw"
-  fi
-  if test "$LIBUNWIND_STAT" = yes ; then
-    LIBUNWIND_CPPFLAGS_STAT='-DUSE_LIBUNWIND'
-  fi
+  libunwind_fpic=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+
+  ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+  CFLAGS="$ORIG_CFLAGS"
+  LIBS="$ORIG_LIBS"
 fi
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: hpcrun unwinder: $unwinder_mesg" >&5
-$as_echo "$as_me: hpcrun unwinder: $unwinder_mesg" >&6;}
+{ $as_echo "$as_me:${as_lineno-$LINENO}: libunwind.a compiled with -fPIC: $libunwind_fpic" >&5
+$as_echo "$as_me: libunwind.a compiled with -fPIC: $libunwind_fpic" >&6;}
+
+unwinder_mesg="$UNWINDER"
+if test "$UNWINDER" != libunw && test "$libunwind_exists" = yes ; then
+  unwinder_mesg="$unwinder_mesg + libunw"
+fi
 
 # fixme: only used in hpcrun/main.c because we don't have a libunwind
 # version of hpcrun_dump_intervals().
-if test "$UNWINDER" = "libunw"; then
+if test "$UNWINDER" != "libunw"; then
 
-$as_echo "#define USE_LIBUNW 1" >>confdefs.h
+$as_echo "#define HPCRUN_HAVE_CUSTOM_UNWINDER 1" >>confdefs.h
 
 fi
-
-
 
 
 
@@ -21067,14 +21077,6 @@ fi
 else
   UNW_PPC64_TRUE='#'
   UNW_PPC64_FALSE=
-fi
-
- if test "$UNWINDER" = mips; then
-  UNW_MIPS_TRUE=
-  UNW_MIPS_FALSE='#'
-else
-  UNW_MIPS_TRUE='#'
-  UNW_MIPS_FALSE=
 fi
 
  if test "$UNWINDER" = libunw; then
@@ -22710,7 +22712,7 @@ if test "$enable_hpcrun" = no ; then
   enable_hpcrun_mesg='no (disabled)'
 elif test "$LIBDWARF" = no   || test "$LIBELF" = no ||  \
      test "$LIBMONITOR" = no || test "$DYNINST" = no || \
-     test "$no_xed_for_hpcrun" = yes || test "$no_unwind_for_hpcrun" = yes
+     test "$no_xed_for_hpcrun" = yes || test "$libunwind_exists" = no
 then
   OPT_ENABLE_HPCRUN=no
   enable_hpcrun_mesg='no (missing prerequisites)'
@@ -22772,7 +22774,7 @@ fi
 
 
 if test "$OPT_LIBMONITOR_STATIC" = no || test "$no_xed_for_hpclink" = yes \
-   || test "$no_unwind_for_hpclink" = yes
+   || test "$libunwind_static" = no
 then
   OPT_ENABLE_HPCRUN_STATIC=no
 fi
@@ -24104,10 +24106,6 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${UNW_PPC64_TRUE}" && test -z "${UNW_PPC64_FALSE}"; then
   as_fn_error $? "conditional \"UNW_PPC64\" was never defined.
-Usually this means the macro was only invoked conditionally." "$LINENO" 5
-fi
-if test -z "${UNW_MIPS_TRUE}" && test -z "${UNW_MIPS_FALSE}"; then
-  as_fn_error $? "conditional \"UNW_MIPS\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${UNW_LIBUNW_TRUE}" && test -z "${UNW_LIBUNW_FALSE}"; then

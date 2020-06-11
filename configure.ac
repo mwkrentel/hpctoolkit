@@ -2661,26 +2661,33 @@ AC_SUBST([LIBMONITOR_WRAP_NAMES])
 
 
 #-------------------------------------------------
-# Option: --with-libunwind=PATH, --enable-libunwind-primary
+# Option: --with-libunwind=PATH
 #-------------------------------------------------
+#
+# Now required on all platforms for hpcrun.
+# Test for three things:
+#
+#  1. libunwind exists (headers + .so) for dynamic case.
+#  2. static archive libunwind.a exists for static case.
+#  3. archive compiled with -fPIC for link into libhpcrun.so.
+#
+# Note: we only use local (first-party) unwinding, so we only need
+# libunwind.so, not libunwind-PLATFORM.so, but code must be compiled
+# with UNW_LOCAL_ONLY.
+#
 
-# Libunwind can be the primary unwinder (any platform), the secondary
-# unwinder or not used at all.  So, keep it optional and test static
-# and dynamic versions separately.  But if libunwind is the primary
-# unwinder, then can't build hpcrun or hpclink without it.
-
-LIBUNWIND_STAT=no
+LIBUNWIND="$default_libunwind_prefix"
 
 LIBUNWIND_IFLAGS=
-LIBUNWIND_CPPFLAGS_DYN=
-LIBUNWIND_CPPFLAGS_STAT=
 LIBUNWIND_LDFLAGS_DYN=
 LIBUNWIND_LDFLAGS_STAT=
 
 LIBUNWIND_COPY=no
-LIBUNWIND_LIB=
+LIBUNWIND_LIB_DIR=
 
-LIBUNWIND="$default_libunwind_prefix"
+libunwind_exists=no
+libunwind_static=no
+libunwind_fpic=no
 
 AC_ARG_WITH([libunwind],
   [AS_HELP_STRING([--with-libunwind=PATH],
@@ -2688,18 +2695,11 @@ AC_ARG_WITH([libunwind],
   [LIBUNWIND="$withval"],
   [])
 
-AC_ARG_ENABLE([libunwind-primary],
-  [AS_HELP_STRING([--enable-libunwind-primary],
-      [use libunwind as primary unwinder for hpcrun (default no)])],
-  [],
-  [enable_libunwind_primary=no])
-
-# If libunwind is available, require dynamic (.so) version, and make
-# static (.a) optional.  On powerpc, libunwind installs libs into
-# lib64, so test for multilib here.
-
 AC_MSG_CHECKING([for libunwind])
 
+#
+# Test if libunwind.h, libunwind.so and libunwind.a exist.
+#
 case "$LIBUNWIND" in
   /* )
     if test ! -f "${LIBUNWIND}/include/libunwind.h" ; then
@@ -2708,19 +2708,21 @@ case "$LIBUNWIND" in
     LIBUNWIND_IFLAGS="-I${LIBUNWIND}/include"
 
     for lib in $multilib_path ; do
-      unw_libdir="${LIBUNWIND}/$lib"
-      if test -f "$unw_libdir/libunwind.so" ; then
-        LIBUNWIND_LDFLAGS_DYN="-L${unw_libdir} -lunwind"
+      unwind_libdir="${LIBUNWIND}/$lib"
+      if test -f "${unwind_libdir}/libunwind.so" ; then
+        LIBUNWIND_LDFLAGS_DYN="-L${unwind_libdir} -lunwind"
     	LIBUNWIND_COPY=yes
-	LIBUNWIND_LIB="$unw_libdir"
-	if test -f "${unw_libdir}/libunwind.a" ; then
-	  LIBUNWIND_STAT=yes
-      	  LIBUNWIND_LDFLAGS_STAT="${unw_libdir}/libunwind.a"
+	LIBUNWIND_LIB_DIR="$unwind_libdir"
+	libunwind_exists=yes
+
+	if test -f "${unwind_libdir}/libunwind.a" ; then
+      	  LIBUNWIND_LDFLAGS_STAT="${unwind_libdir}/libunwind.a"
+	  libunwind_static=yes
 	fi
 	break
       fi
     done
-    if test "x$LIBUNWIND_LIB" = x ; then
+    if test "$libunwind_exists" != yes ; then
       AC_MSG_ERROR([invalid libunwind directory: $LIBUNWIND])
     fi
     num_pkgs=`expr 1 + $num_pkgs`
@@ -2733,69 +2735,67 @@ case "$LIBUNWIND" in
 esac
 
 AC_MSG_RESULT([$LIBUNWIND])
-AC_MSG_NOTICE([libunwind static: $LIBUNWIND_STAT])
+AC_MSG_NOTICE([libunwind.a static archive: $libunwind_static])
 
-case "$enable_libunwind_primary" in
-  yes | Yes | YES )
-    if test "$LIBUNWIND" = no ; then
-      AC_MSG_ERROR([enable libunwind primary requires libunwind])
-    fi
-    UNWINDER=libunw
-    ;;
-esac
+#
+# Test if libunwind.a was compiled with -fPIC.
+#
+if test "x$libunwind_static" = xyes
+then
+  ORIG_CFLAGS="$CFLAGS"
+  ORIG_LIBS="$LIBS"
+  CFLAGS="-shared -fPIC $LIBUNWIND_IFLAGS"
+  LIBS="$LIBUNWIND_LDFLAGS_STAT"
 
-no_unwind_for_hpcrun=no
-no_unwind_for_hpclink=no
-unwinder_mesg="$UNWINDER"
+  AC_LANG_PUSH([C])
+  AC_LINK_IFELSE([
+  AC_LANG_SOURCE([[
+#define UNW_LOCAL_ONLY
+#include <sys/types.h>
+#include <libunwind.h>
+unw_word_t
+my_get_ip_addr(unw_context_t *context)
+{
+  unw_cursor_t cursor;
+  unw_word_t ip;
+  unw_init_local(&cursor, context);
+  unw_step(&cursor);
+  unw_get_reg(&cursor, UNW_REG_IP, &ip);
+  return ip;
+}
+]])], [libunwind_fpic=yes], [libunwind_fpic=no])
 
-if test "$UNWINDER" = libunw ; then
-  #
-  # libunwind is the primary unwinder.  must have libunwind or else
-  # can't build hpcrun or hpclink.  don't need CPPFLAGS in this case.
-  #
-  if test "$LIBUNWIND" = no ; then
-    no_unwind_for_hpcrun=yes
-  fi
-  if test "$LIBUNWIND_STAT" = no ; then
-    no_unwind_for_hpclink=yes
-  fi
-else
-  #
-  # libunwind is the secondary unwinder or not available.  can build
-  # hpcrun without libunwind, but set CPPFLAGS when available.
-  #
-  if test "$LIBUNWIND" != no ; then
-    LIBUNWIND_CPPFLAGS_DYN='-DUSE_LIBUNWIND'
-    unwinder_mesg="$UNWINDER + libunw"
-  fi
-  if test "$LIBUNWIND_STAT" = yes ; then
-    LIBUNWIND_CPPFLAGS_STAT='-DUSE_LIBUNWIND'
-  fi
+  AC_LANG_POP
+  CFLAGS="$ORIG_CFLAGS"
+  LIBS="$ORIG_LIBS"
 fi
 
-AC_MSG_NOTICE([hpcrun unwinder: $unwinder_mesg])
+AC_MSG_NOTICE([libunwind.a compiled with -fPIC: $libunwind_fpic])
+
+unwinder_mesg="$UNWINDER"
+if test "$UNWINDER" != libunw && test "$libunwind_exists" = yes ; then
+  unwinder_mesg="$unwinder_mesg + libunw"
+fi
 
 # fixme: only used in hpcrun/main.c because we don't have a libunwind
 # version of hpcrun_dump_intervals().
-if test "$UNWINDER" = "libunw"; then
-   AC_DEFINE([USE_LIBUNW], [1], [libunwind is the specified unwinder])
+if test "$UNWINDER" != "libunw"; then
+  AC_DEFINE([HPCRUN_HAVE_CUSTOM_UNWINDER], 1,
+            [have custom unwinder for this platform])
 fi
 
 AC_SUBST(LIBUNWIND_IFLAGS)
-AC_SUBST(LIBUNWIND_CPPFLAGS_DYN)
-AC_SUBST(LIBUNWIND_CPPFLAGS_STAT)
 AC_SUBST(LIBUNWIND_LDFLAGS_DYN)
 AC_SUBST(LIBUNWIND_LDFLAGS_STAT)
 
 AC_SUBST(LIBUNWIND_COPY)
-AC_SUBST(LIBUNWIND_LIB)
+AC_SUBST(LIBUNWIND_LIB_DIR)
 
 #
 # set up automake choice of unwinder
 #
 AM_CONDITIONAL([UNW_X86], [test "$UNWINDER" = x86-family])
 AM_CONDITIONAL([UNW_PPC64], [test "$UNWINDER" = ppc64])
-AM_CONDITIONAL([UNW_MIPS], [test "$UNWINDER" = mips])
 AM_CONDITIONAL([UNW_LIBUNW], [test "$UNWINDER" = libunw])
 
 
@@ -4110,7 +4110,7 @@ if test "$enable_hpcrun" = no ; then
   enable_hpcrun_mesg='no (disabled)'
 elif test "$LIBDWARF" = no   || test "$LIBELF" = no ||  \
      test "$LIBMONITOR" = no || test "$DYNINST" = no || \
-     test "$no_xed_for_hpcrun" = yes || test "$no_unwind_for_hpcrun" = yes
+     test "$no_xed_for_hpcrun" = yes || test "$libunwind_exists" = no
 then
   OPT_ENABLE_HPCRUN=no
   enable_hpcrun_mesg='no (missing prerequisites)'
@@ -4161,7 +4161,7 @@ AC_ARG_ENABLE([hpcrun-static],
   [OPT_ENABLE_HPCRUN_STATIC=yes])
 
 if test "$OPT_LIBMONITOR_STATIC" = no || test "$no_xed_for_hpclink" = yes \
-   || test "$no_unwind_for_hpclink" = yes
+   || test "$libunwind_static" = no
 then
   OPT_ENABLE_HPCRUN_STATIC=no
 fi
