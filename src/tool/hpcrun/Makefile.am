@@ -604,7 +604,6 @@ libhpctoolkit_a_SOURCES = 		\
 
 libhpcrun_la_CPPFLAGS =			\
 	$(MY_CPP_DEFINES)		\
-	$(LIBUNWIND_CPPFLAGS_DYN)	\
 	$(MY_INCLUDE_DIRS)
 
 if OPT_BGQ_BACKEND
@@ -614,7 +613,6 @@ endif
 libhpcrun_o_CPPFLAGS =			\
 	-DHPCRUN_STATIC_LINK		\
 	$(MY_CPP_DEFINES)		\
-	$(LIBUNWIND_CPPFLAGS_STAT)	\
 	$(MY_INCLUDE_DIRS)
 
 if OPT_BGQ_BACKEND
