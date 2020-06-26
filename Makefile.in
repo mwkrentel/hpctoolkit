@@ -310,10 +310,10 @@ LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
 LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 LZMA_COPY = @LZMA_COPY@
-LZMA_INC = @LZMA_INC@
+LZMA_IFLAGS = @LZMA_IFLAGS@
 LZMA_LDFLAGS_DYN = @LZMA_LDFLAGS_DYN@
 LZMA_LDFLAGS_STAT = @LZMA_LDFLAGS_STAT@
-LZMA_LIB = @LZMA_LIB@
+LZMA_LIB_DIR = @LZMA_LIB_DIR@
 LZMA_PROF_MPI_LIBS = @LZMA_PROF_MPI_LIBS@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
@@ -898,8 +898,7 @@ install-exec-local:
 	@$(call copy-libs,$(LIBMONITOR_COPY),$(LIBMONITOR_LIB),libmonitor*)
 	@$(call copy-libs,$(PERFMON_COPY),$(PERFMON_LIB),libpfm.so*)
 	@$(call copy-libs,$(LIBUNWIND_COPY),$(LIBUNWIND_LIB_DIR),libunwind.so*)
-	@$(call copy-libs,$(LZMA_COPY),$(LZMA_LIB),liblzma.so*)
-	@$(call copy-libs,$(LZMA_COPY),$(LZMA_LIB),liblzma.a*)
+	@$(call copy-libs,$(LZMA_COPY),$(LZMA_LIB_DIR),liblzma.so*)
 	@$(call copy-libs,$(TBB_COPY),$(TBB_LIB_DIR),libtbb.so*)
 	@$(call copy-libs,$(TBB_COPY),$(TBB_LIB_DIR),libtbbmalloc.so*)
 	@$(call copy-libs,$(TBB_COPY),$(TBB_LIB_DIR),libtbbmalloc_proxy.so*)
