@@ -170,6 +170,7 @@ ZLIB_HPCLINK_LIB = @ZLIB_HPCLINK_LIB@
 ZLIB_INC = @ZLIB_INC@
 
 LZMA_LDFLAGS_DYN=@LZMA_LDFLAGS_DYN@
+LZMA_LDFLAGS_STAT=@LZMA_LDFLAGS_STAT@
 
 HPCFNBOUNDS_INC = $(top_srcdir)/src/tool/hpcfnbounds
 
@@ -734,8 +735,8 @@ libhpcrun_pthread_la_LDFLAGS = -Wl,-Bsymbolic
 libhpcrun_mpi_la_LDFLAGS = -Wl,-Bsymbolic
 
 libhpcrun_o_LDFLAGS = $(LIBUNWIND_LDFLAGS_STAT) \
-			$(PERFMON_LDFLAGS_STAT) 
-		 
+	$(LZMA_LDFLAGS_STAT)  \
+	$(PERFMON_LDFLAGS_STAT)
 
 if OPT_USE_ZLIB
 #  libhpcrun_o_LDFLAGS   += $(ZLIB_HPCLINK_LIB)

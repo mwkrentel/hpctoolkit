@@ -2683,6 +2683,7 @@ LIBUNWIND_COPY=no
 LIBUNWIND_LIB_DIR=
 
 libunwind_exists=no
+libunwind_dynamic=no
 libunwind_static=no
 libunwind_fpic=no
 
@@ -2705,18 +2706,18 @@ case "$LIBUNWIND" in
     LIBUNWIND_IFLAGS="-I${LIBUNWIND}/include"
 
     for lib in $multilib_path ; do
-      unwind_libdir="${LIBUNWIND}/$lib"
-      if test -f "${unwind_libdir}/libunwind.so" ; then
-        LIBUNWIND_LDFLAGS_DYN="-L${unwind_libdir} -lunwind"
+      ldir="${LIBUNWIND}/$lib"
+      if test -f "${ldir}/libunwind.so" ; then
+        LIBUNWIND_LDFLAGS_DYN="-L${ldir} -lunwind"
     	LIBUNWIND_COPY=yes
-	LIBUNWIND_LIB_DIR="$unwind_libdir"
+	LIBUNWIND_LIB_DIR="$ldir"
 	libunwind_exists=yes
-
-	if test -f "${unwind_libdir}/libunwind.a" ; then
-      	  LIBUNWIND_LDFLAGS_STAT="${unwind_libdir}/libunwind.a"
-	  libunwind_static=yes
-	fi
-	break
+	libunwind_dynamic=yes
+      fi
+      if test -f "${ldir}/libunwind.a" ; then
+        LIBUNWIND_LDFLAGS_STAT="${ldir}/libunwind.a"
+	libunwind_exists=yes
+	libunwind_static=yes
       fi
     done
     if test "$libunwind_exists" != yes ; then
@@ -2736,6 +2737,7 @@ AC_MSG_NOTICE([libunwind.a static archive: $libunwind_static])
 
 #
 # Test if libunwind.a was compiled with -fPIC.
+# If yes, then use for both static and dynamic.
 #
 if test "x$libunwind_static" = xyes
 then
@@ -2769,6 +2771,11 @@ fi
 
 AC_MSG_NOTICE([libunwind.a compiled with -fPIC: $libunwind_fpic])
 
+if test "$libunwind_fpic" = yes ; then
+  LIBUNWIND_LDFLAGS_DYN="$LIBUNWIND_LDFLAGS_STAT"
+  LIBUNWIND_COPY=no
+fi
+
 unwinder_mesg="$UNWINDER"
 if test "$UNWINDER" != libunw && test "$libunwind_exists" = yes ; then
   unwinder_mesg="$unwinder_mesg + libunw"
@@ -2799,23 +2806,28 @@ AM_CONDITIONAL([UNW_LIBUNW], [test "$UNWINDER" = libunw])
 #-------------------------------------------------
 # Option: --with-lzma=PATH
 #-------------------------------------------------
-
-# Test for lzma libraries and add to the build system if available.
-# New libunwind (aug 2017) uses liblzma to read compressed sections.
-# But allow for older externals that doesn't build them.
 #
-# Dynamically, add -llzma to libhpcrun.so and copy libs.
-# Statically, link liblzma.a into libhpcrun.o at build time.
-
-LZMA_STATIC=no
-LZMA_LDFLAGS_DYN=
-LZMA_LDFLAGS_STAT=
-LZMA_INC=no
-LZMA_COPY=no
-LZMA_LIB=
-LZMA_PROF_MPI_LIBS=
+# Test for three things:
+#
+#  1. liblzma exists (headers + .so) for dynamic case.
+#  2. static archive liblzma.a exists for static case.
+#  3. archive compiled with -fPIC for link into libhpcrun.so.
+#
 
 LZMA="$default_lzma_prefix"
+
+LZMA_IFLAGS=
+LZMA_LDFLAGS_DYN=
+LZMA_LDFLAGS_STAT=
+LZMA_PROF_MPI_LIBS=
+
+LZMA_COPY=no
+LZMA_LIB_DIR=
+
+lzma_exists=no
+lzma_dynamic=no
+lzma_static=no
+lzma_fpic=no
 
 AC_ARG_WITH([lzma],
   [AS_HELP_STRING([--with-lzma=PATH],
@@ -2825,34 +2837,33 @@ AC_ARG_WITH([lzma],
 
 AC_MSG_CHECKING([for lzma])
 
+#
+# Test if lzma.h, liblzma.so and/or liblzma.a exist.
+#
 case "$LZMA" in
   /* )
+    if test ! -f "${LZMA}/include/lzma.h" ; then
+      AC_MSG_ERROR([invalid lzma directory: $LZMA])
+    fi
+    LZMA_IFLAGS="-I${LZMA}/include"
+
     for lib in $multilib_path ; do
-      lzma_libdir="${LZMA}/$lib"
-      if test -f "${lzma_libdir}/liblzma.so" ; then
-        LZMA_LDFLAGS_DYN="-L${lzma_libdir} -llzma"
+      ldir="${LZMA}/$lib"
+      if test -f "${ldir}/liblzma.so" ; then
+        LZMA_LDFLAGS_DYN="-L${ldir} -llzma"
 	LZMA_COPY=yes
-	LZMA_LIB="$lzma_libdir"
-        LZMA_INC="${LZMA}/include"
-	if test -f "${lzma_libdir}/liblzma.a" ; then
-	  LZMA_STATIC=yes
-	  LZMA_LDFLAGS_STAT="${lzma_libdir}/liblzma.a"
-	fi
-	break
+	LZMA_LIB_DIR="$ldir"
+        lzma_exists=yes
+	lzma_dynamic=yes
+      fi
+      if test -f "${ldir}/liblzma.a" ; then
+        LZMA_LDFLAGS_STAT="${ldir}/liblzma.a"
+        lzma_exists=yes
+	lzma_static=yes
       fi
     done
-    if test "x$LZMA_LIB" = x ; then
+    if test "$lzma_exists" != yes ; then
       AC_MSG_ERROR([invalid lzma directory: $LZMA])
-    else
-      #
-      # hpcprof-mpi: same as hpclink if fully static, else default
-      #
-      echo "x$HPCPROFMPI_LT_LDFLAGS" | grep -e all-static >/dev/null 2>&1
-      if test $? = 0 ; then
-        LZMA_PROF_MPI_LIBS="$LZMA_LDFLAGS_DYN"
-      else
-        LZMA_PROF_MPI_LIBS="$LZMA_LDFLAGS_STAT"
-      fi
     fi
     num_pkgs=`expr 1 + $num_pkgs`
     ;;
@@ -2864,14 +2875,64 @@ case "$LZMA" in
 esac
 
 AC_MSG_RESULT([$LZMA])
-AC_MSG_NOTICE([lzma static: $LZMA_STATIC])
+AC_MSG_NOTICE([lzma.a static archive: $lzma_static])
 
+#
+# Test if liblzma.a was compiled with -fPIC.
+# If yes, then use for both static and dynamic.
+#
+if test "$lzma_static" = yes
+then
+  ORIG_CFLAGS="$CFLAGS"
+  ORIG_LIBS="$LIBS"
+  CFLAGS="-shared -fPIC $LZMA_IFLAGS"
+  LIBS="$LZMA_LDFLAGS_STAT"
+
+  AC_LANG_PUSH([C])
+  AC_LINK_IFELSE([
+  AC_LANG_SOURCE([[
+#include <sys/types.h>
+#include <inttypes.h>
+#include <lzma.h>
+long
+myencode(uint8_t *in_buf, uint8_t *out_buf)
+{
+  lzma_stream stream = LZMA_STREAM_INIT;
+  stream.next_in = in_buf;
+  stream.next_out = out_buf;
+  lzma_code(&stream, LZMA_FINISH);
+  return (long) stream.avail_out;
+}
+]])], [lzma_fpic=yes], [lzma_fpic=no])
+
+  AC_LANG_POP
+  CFLAGS="$ORIG_CFLAGS"
+  LIBS="$ORIG_LIBS"
+fi
+
+AC_MSG_NOTICE([lzma.a compiled with -fPIC: $lzma_fpic])
+
+if test "$lzma_fpic" = yes ; then
+  LZMA_LDFLAGS_DYN="$LZMA_LDFLAGS_STAT"
+  LZMA_COPY=no
+fi
+
+#
+# hpcprof-mpi: same as hpclink if fully static, else default
+#
+echo "x$HPCPROFMPI_LT_LDFLAGS" | grep -e all-static >/dev/null 2>&1
+if test $? = 0 ; then
+  LZMA_PROF_MPI_LIBS="$LZMA_LDFLAGS_DYN"
+else
+  LZMA_PROF_MPI_LIBS="$LZMA_LDFLAGS_STAT"
+fi
+
+AC_SUBST([LZMA_IFLAGS])
 AC_SUBST([LZMA_LDFLAGS_DYN])
 AC_SUBST([LZMA_LDFLAGS_STAT])
 AC_SUBST([LZMA_PROF_MPI_LIBS])
 AC_SUBST([LZMA_COPY])
-AC_SUBST([LZMA_INC])
-AC_SUBST([LZMA_LIB])
+AC_SUBST([LZMA_LIB_DIR])
 
 
 #-------------------------------------------------
