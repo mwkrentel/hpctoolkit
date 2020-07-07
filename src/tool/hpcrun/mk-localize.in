@@ -1,0 +1,215 @@
+#!/bin/sh
+#
+# Copyright (c) 2002-2020, Rice University.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are
+# met:
+#
+# * Redistributions of source code must retain the above copyright
+#   notice, this list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright
+#   notice, this list of conditions and the following disclaimer in the
+#   documentation and/or other materials provided with the distribution.
+#
+# * Neither the name of Rice University (RICE) nor the names of its
+#   contributors may be used to endorse or promote products derived from
+#   this software without specific prior written permission.
+#
+# This software is provided by RICE and contributors "as is" and any
+# express or implied warranties, including, but not limited to, the
+# implied warranties of merchantability and fitness for a particular
+# purpose are disclaimed. In no event shall RICE or contributors be
+# liable for any direct, indirect, incidental, special, exemplary, or
+# consequential damages (including, but not limited to, procurement of
+# substitute goods or services; loss of use, data, or profits; or
+# business interruption) however caused and on any theory of liability,
+# whether in contract, strict liability, or tort (including negligence
+# or otherwise) arising in any way out of the use of this software, even
+# if advised of the possibility of such damage.
+#
+#----------------------------------------------------------------------
+
+# This script uses objcopy to hide (localize) the visibility of
+# symbols in libhpcrun.o and libhpcrun.so from 3rd-party prereq
+# libraries.  We use this when we statically link a library (built
+# with -fPIC) into libhpcrun.  This helps prevent hpcrun from
+# interfering with an application if they use the same dependent
+# library, especially with a different version.
+#
+# Usage:  ./mk-localize  install-directory  lib ...
+#
+# To add a new library:
+#
+#  1. build a static archive for the library with -fPIC.
+#   this likely involves editing the spack recipe.
+#  2. add a configure test for a static archive with -fPIC.
+#  3. add the library name to HIDE_LIBS_LIST.
+#  4. inventory the library for its function names and add a function
+#   in this script to use nm to generate the symbols in libhpcrun
+#   that are internal to the library.
+#
+# Run this script from the hpcrun build directory (after substitution).
+#
+# Note: we scan the library in the build directory for the symbol
+# names, but modify the copy in the install directory.
+#
+# Note: be cautious about failing the script because that breaks the
+# build.  If the configure/make infrastructure is broken, then fail
+# the build.  But if we can't read the symbols or objcopy fails, then
+# treat that as a warning.
+
+#----------------------------------------------------------------------
+
+ARCH='@LIBUNWIND_ARCH@'
+OBJCOPY='@OPT_OBJCOPY@'
+
+script_name='mk-localize'
+
+die() {
+    echo "${script_name}: error: $@"
+    exit 2
+}
+
+warn() {
+    echo "${script_name}: warning: $@"
+}
+
+mesg() {
+    echo "${script_name}: $@"
+}
+
+#------------------------------------------------------------
+# Command-line options
+#------------------------------------------------------------
+
+# Options:  mk-localize  install-directory  lib ...
+
+INSTALL="$1"
+shift
+
+LIBRARY_LIST="$*"
+
+if test "x$INSTALL" = x ; then
+    die "missing install directory"
+fi
+if test ! -d "$INSTALL" ; then
+    die "install directory is not a directory: $INSTALL"
+fi
+if test "x$LIBRARY_LIST" = x ; then
+    mesg "skipping hiding hpcrun libraries, no libraries"
+    exit 0
+fi
+
+#------------------------------------------------------------
+# lzma
+#------------------------------------------------------------
+#
+# Lzma is easy, all the names start with lzma_*.
+#
+#  $1 = file name in build directory
+#  $2 = file to put function names into
+#
+do_lzma()
+{
+    file="$1"
+    names="$2"
+
+    nm "$file" | awk '{ print $3 }' | grep -e '^lzma_' >> "$names"
+}
+
+#------------------------------------------------------------
+# libunwind
+#------------------------------------------------------------
+#
+# Libunwind is harder, several patterns, some including the arch type,
+# where arch is: x86_64, ppc64 or aarch64.
+#
+#  _U<arch>_ *
+#  _UI<arch>_ *
+#  _UL<arch>_ *
+#  _U_dyn_ *
+#  _Unwind_ *
+#  __libunwind_ *
+#  _ReadSLEB
+#  _ReadULEB
+#  unw_backtrace
+#
+do_libunwind()
+{
+    file="$1"
+    names="$2"
+
+    nm "$file" | awk '{ print $3 }' | grep -E -e "^_(U|UI|UL)${ARCH}_" >> "$names"
+
+    nm "$file" | awk '{ print $3 }' | grep -E -e '^_(U_dyn|Unwind|_libunwind)_' >> "$names"
+
+    for sym in _ReadSLEB  _ReadULEB  unw_backtrace
+    do
+	echo "$sym" >> "$names"
+    done
+}
+
+#------------------------------------------------------------
+# Hide (localize) function names in one file.
+#------------------------------------------------------------
+#
+# Localize the functions for one file ($1).  Note: we should be in the
+# build directory for this file, but don't modify the build copy.
+# Instead modify the installed file ($INSTALL).
+#
+do_file()
+{
+    file="$1"
+    names="${file}-names"
+
+    # It's possible that we don't build the static or dynamic case, so
+    # treat missing file as only a warning.
+    if test ! -f "$file" ; then
+	warn "skipping ${file}: no such file"
+	return
+    fi
+
+    rm -f "$names"
+    touch "$names"
+
+    for lib in $LIBRARY_LIST ; do
+	case "$lib" in
+	    lzma ) do_lzma "$file" "$names" ;;
+	    libunwind ) do_libunwind "$file" "$names" ;;
+	    * ) warn "unknown library name: $lib" ;;
+	esac
+    done
+
+    num_syms=`wc "$names" | awk '{ print $1 }'`
+
+    mesg "objcopy $file  ($num_syms symbols)"
+
+    objcopy --localize-symbols="$names" "${INSTALL}/$file"
+
+    if test $? -ne 0 ; then
+	warn "objcopy failed"
+    fi
+}
+
+#------------------------------------------------------------
+# Main program
+#------------------------------------------------------------
+
+# Hide symbols for libhpcrun.o and ./libs/libhcrun.so.
+# It's not an error if one or both of the libraries isn't there.
+
+do_file libhpcrun.o
+
+cd .libs
+
+file=libhpcrun.so
+if test -L "$file" ; then
+    file=`readlink $file`
+fi
+
+do_file "$file"
+
+exit 0

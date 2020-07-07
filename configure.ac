@@ -2776,6 +2776,20 @@ if test "$libunwind_fpic" = yes ; then
   LIBUNWIND_COPY=no
 fi
 
+# libunwind includes the arch type (x86_64, ppc64, aarch64) in some of
+# the function names.
+
+LIBUNWIND_ARCH=none
+case "$host_cpu" in
+  *86* | *amd* )  LIBUNWIND_ARCH=x86_64 ;;
+  *ppc* | *pow* )  LIBUNWIND_ARCH=ppc64 ;;
+  *aarch* | *arm* )  LIBUNWIND_ARCH=ppc64 ;;
+  * ) AC_MSG_WARN([unable to determine libunwind arch type: $host_cpu])
+      libunwind_fpic=no ;;
+esac
+
+AC_MSG_NOTICE([libunwind arch type (for objcopy names): $LIBUNWIND_ARCH])
+
 unwinder_mesg="$UNWINDER"
 if test "$UNWINDER" != libunw && test "$libunwind_exists" = yes ; then
   unwinder_mesg="$unwinder_mesg + libunw"
@@ -2788,6 +2802,7 @@ if test "$UNWINDER" != "libunw"; then
             [have custom unwinder for this platform])
 fi
 
+AC_SUBST(LIBUNWIND_ARCH)
 AC_SUBST(LIBUNWIND_IFLAGS)
 AC_SUBST(LIBUNWIND_LDFLAGS_DYN)
 AC_SUBST(LIBUNWIND_LDFLAGS_STAT)
@@ -3856,6 +3871,37 @@ AC_SUBST([ZLIB_COPY])
 
 
 #----------------------------------------------------------------------------
+# Hide Libraries inside hpcrun
+#----------------------------------------------------------------------------
+
+# Make the list of library archives that are compiled with -fPIC that
+# we can hide (localize) in libhpcrun.  This has to account for
+# dependencies, so we build the list at the end, after testing all
+# packages.
+#
+# For example, libunwind calls lzma.  Statically linking (and hiding)
+# libunwind with dynamic lzma works.  But iff libunwind is dynamically
+# linked, then it will always pull in lzma dynamically.  So, hiding
+# lzma implies hiding libunwind.
+
+HIDE_LIBS_LIST=
+
+if test "$libunwind_fpic" = yes ; then
+  HIDE_LIBS_LIST="$HIDE_LIBS_LIST libunwind"
+
+  if test "$lzma_fpic" = yes ; then
+    HIDE_LIBS_LIST="$HIDE_LIBS_LIST lzma"
+  fi
+fi
+
+HIDE_LIBS_LIST=`echo $HIDE_LIBS_LIST`
+
+AC_SUBST(HIDE_LIBS_LIST)
+
+AM_CONDITIONAL(OPT_HIDE_LIBS, [test "x$HIDE_LIBS_LIST" != x])
+
+
+#----------------------------------------------------------------------------
 # Extra Dyninst tests
 #----------------------------------------------------------------------------
 
@@ -4555,6 +4601,29 @@ fi
 
 
 #-------------------------------------------------
+# OBJCOPY
+#-------------------------------------------------
+
+# Search for an objcopy program that works with CC, or else specify
+# one with OBJCOPY.  This is mostly for the cross-compile case with
+# names like x86_64-k1om-linux-objcopy.  The hpcrun mk-localize script
+# uses this.
+
+AC_CHECK_TOOL([OPT_OBJCOPY], [objcopy], [objcopy])
+
+AC_ARG_VAR([OBJCOPY],
+  [objcopy program for binaries produced by CC, only needed
+   if autoconf fails to find a suitable program])
+
+if test -n "$OBJCOPY" ; then
+    AC_MSG_NOTICE([setting objcopy to: $OBJCOPY])
+    OPT_OBJCOPY="$OBJCOPY"
+fi
+
+AC_SUBST(OPT_OBJCOPY)
+
+
+#-------------------------------------------------
 # check for POSIX real-time timers
 #-------------------------------------------------
 
@@ -4822,28 +4891,6 @@ if test "${OPT_ENABLE_DATACENTRIC_TRACE}" = "yes" ; then
 fi
 
 
-
-#-------------------------------------------------
-# with-objcopy
-#-------------------------------------------------
-
-AC_MSG_CHECKING([whether configured with objcopy])
-
-OPT_OBJCOPY=objcopy
-
-AC_ARG_WITH([objcopy],
-  AS_HELP_STRING([--with-objcopy=<obcopy_path>],
-                 [use given objcopy when hiding hpcrun library symbols]),
-  [if test $withval != no; then
-     OPT_OBJCOPY=${withval}
-   fi],
-  [])
-
-AC_MSG_RESULT([yes (${OPT_OBJCOPY})])
-
-AC_SUBST(OPT_OBJCOPY)
-
-
 #-------------------------------------------------
 # enable-devtools: Tools of interest to developers
 #-------------------------------------------------
@@ -5055,6 +5102,8 @@ AC_CONFIG_FILES([ \
   src/lib/xml/Makefile \
 ])
 
+AC_CONFIG_FILES([src/tool/hpcrun/mk-localize],
+  [chmod +x src/tool/hpcrun/mk-localize])
 
 AC_CONFIG_FILES([src/tool/hpcrun/scripts/hpcrun],
   [chmod +x src/tool/hpcrun/scripts/hpcrun])
@@ -5119,6 +5168,9 @@ AC_MSG_NOTICE([  host:   ${host} ${host_extra_mesg}])
 AC_MSG_NOTICE([  host endian: $host_endian])
 AC_MSG_NOTICE([])
 AC_MSG_NOTICE([  hpcrun?:      ${enable_hpcrun_mesg}])
+if test "x$HIDE_LIBS_LIST" != x ; then
+  AC_MSG_NOTICE([  hide libs:    ${HIDE_LIBS_LIST}])
+fi
 AC_MSG_NOTICE([  hpclink?:     ${OPT_ENABLE_HPCRUN_STATIC}])
 AC_MSG_NOTICE([  hpcprof-mpi:  ${prof_mpi_avail}])
 AC_MSG_NOTICE([  unwinder:     ${unwinder_mesg}])

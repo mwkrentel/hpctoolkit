@@ -302,7 +302,7 @@ DIST_COMMON = $(srcdir)/Makefile.am $(am__include_HEADERS_DIST) \
 	$(am__DIST_COMMON)
 mkinstalldirs = $(SHELL) $(top_srcdir)/config/mkinstalldirs
 CONFIG_HEADER = $(top_builddir)/src/include/hpctoolkit-config.h
-CONFIG_CLEAN_FILES =
+CONFIG_CLEAN_FILES = mk-localize
 CONFIG_CLEAN_VPATH_FILES =
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
@@ -1239,7 +1239,8 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 DIST_SUBDIRS = utilities/bgq-cnk
-am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/config/depcomp \
+am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/mk-localize.in \
+	$(top_srcdir)/config/depcomp \
 	$(top_srcdir)/config/mkinstalldirs \
 	$(top_srcdir)/src/Makeinclude.config \
 	$(top_srcdir)/src/Makeinclude.rules
@@ -1323,6 +1324,10 @@ GOTCHA_IFLAGS = @GOTCHA_IFLAGS@
 GOTCHA_LDFLAGS = @GOTCHA_LDFLAGS@
 GOTCHA_LIBDIR = @GOTCHA_LIBDIR@
 GREP = @GREP@
+
+# Install libhpcrun.o into pkglibdir.  New automake won't install a
+# program into a libdir, so we use noinst and install it manually.
+HIDE_LIBS_LIST = @HIDE_LIBS_LIST@
 HOST_AR = @HOST_AR@
 HOST_CFLAGS = @HOST_CFLAGS@
 HOST_CXXFLAGS = @HOST_CXXFLAGS@
@@ -1365,6 +1370,7 @@ LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIBTOOL_DEPS = @LIBTOOL_DEPS@
+LIBUNWIND_ARCH = @LIBUNWIND_ARCH@
 LIBUNWIND_COPY = @LIBUNWIND_COPY@
 LIBUNWIND_IFLAGS = @LIBUNWIND_IFLAGS@
 LIBUNWIND_LDFLAGS_DYN = @LIBUNWIND_LDFLAGS_DYN@
@@ -1395,6 +1401,7 @@ MPI_INC = @MPI_INC@
 MPI_PROTO_FILE = @MPI_PROTO_FILE@
 NM = @NM@
 NMEDIT = @NMEDIT@
+OBJCOPY = @OBJCOPY@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OPENMP_FLAG = @OPENMP_FLAG@
@@ -2072,6 +2079,8 @@ $(top_srcdir)/configure: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
 $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
+mk-localize: $(top_builddir)/config.status $(srcdir)/mk-localize.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 install-pkglibLIBRARIES: $(pkglib_LIBRARIES)
 	@$(NORMAL_INSTALL)
 	@list='$(pkglib_LIBRARIES)'; test -n "$(pkglibdir)" || list=; \
@@ -8233,7 +8242,6 @@ maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
 	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
-@OPT_ENABLE_HPCRUN_STATIC_FALSE@install-exec-hook:
 clean: clean-recursive
 
 clean-am: clean-generic clean-libtool clean-noinstPROGRAMS \
@@ -8370,11 +8378,9 @@ install-data-hook:
 	    cp -f "$(plugin_srcdir)/$$file" "$(DESTDIR)$(plugin_instdir)/$$file" ; \
 	done
 
-# Install libhpcrun.o into pkglibdir.  New automake won't install a
-# program into a libdir, so we use noinst and install it manually.
-
-@OPT_ENABLE_HPCRUN_STATIC_TRUE@install-exec-hook:
+install-exec-hook:
 @OPT_ENABLE_HPCRUN_STATIC_TRUE@	cp libhpcrun.o $(DESTDIR)$(pkglibdir)
+@OPT_HIDE_LIBS_TRUE@	./mk-localize $(DESTDIR)$(pkglibdir) $(HIDE_LIBS_LIST)
 
 %.cpp.pp : %.cpp
 	$(CXXCPP) $(MYCPPFLAGS_0_CXX) $< > $@

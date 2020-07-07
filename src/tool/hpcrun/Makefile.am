@@ -1020,9 +1020,14 @@ install-data-hook:
 # Install libhpcrun.o into pkglibdir.  New automake won't install a
 # program into a libdir, so we use noinst and install it manually.
 
-if OPT_ENABLE_HPCRUN_STATIC
+HIDE_LIBS_LIST = @HIDE_LIBS_LIST@
+
 install-exec-hook:
+if OPT_ENABLE_HPCRUN_STATIC
 	cp libhpcrun.o $(DESTDIR)$(pkglibdir)
+endif
+if OPT_HIDE_LIBS
+	./mk-localize $(DESTDIR)$(pkglibdir) $(HIDE_LIBS_LIST)
 endif
 
 
