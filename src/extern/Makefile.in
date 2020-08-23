@@ -16,8 +16,15 @@
 
 # -*-Mode: makefile;-*-
 
-#############################################################################
-#############################################################################
+# The src/extern directory is for modifying 3rd-party libraries for
+# hpcrun: libunwind, lzma, etc.  This is for renaming symbols,
+# stripping debug sections, etc.
+#
+# We copy the original library into the build directory, unpack the
+# archive, use objcopy to modify the members, repack the archive and
+# then leave it for linking into hpcrun.
+
+#----------------------------------------------------------------------
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -92,7 +99,9 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-subdir = src
+@OPT_LIBUNWIND_STATIC_TRUE@am__append_1 = libunwind
+@OPT_LZMA_STATIC_TRUE@am__append_2 = lzma
+subdir = src/extern
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/libtool.m4 \
 	$(top_srcdir)/config/ltoptions.m4 \
@@ -162,7 +171,7 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = $(SUBDIRS)
+DIST_SUBDIRS = libunwind lzma
 am__DIST_COMMON = $(srcdir)/Makefile.in \
 	$(top_srcdir)/config/mkinstalldirs
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -437,18 +446,8 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-
-# We do not want the standard GNU files (NEWS README AUTHORS ChangeLog...)
 AUTOMAKE_OPTIONS = foreign
-
-#############################################################################
-# Automake rules
-#############################################################################
-SUBDIRS = \
-	extern \
-	lib \
-	tool
-
+SUBDIRS = $(am__append_1) $(am__append_2)
 all: all-recursive
 
 .SUFFIXES:
@@ -461,9 +460,9 @@ $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__confi
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign src/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign src/extern/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --foreign src/Makefile
+	  $(AUTOMAKE) --foreign src/extern/Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
 	  *config.status*) \
@@ -760,10 +759,6 @@ uninstall-am:
 
 .PRECIOUS: Makefile
 
-
-#############################################################################
-# Other rules
-#############################################################################
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

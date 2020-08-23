@@ -44,31 +44,25 @@
 ##
 ## ******************************************************* EndRiceCopyright *
 
-#############################################################################
-##
-## File:
-##   $HeadURL$
-##
-## Description:
-##   *Process with automake to produce Makefile.in*
-##
-##   Note: All local variables are prefixed with MY to prevent name
-##   clashes with automatic automake variables.
-##
-#############################################################################
+# Modify libunwind.a.  For now, just copy from input directory.
 
-# We do not want the standard GNU files (NEWS README AUTHORS ChangeLog...)
+#----------------------------------------------------------------------
+
 AUTOMAKE_OPTIONS = foreign
 
-#############################################################################
-# Automake rules
-#############################################################################
+EXTERN_LIB = @LIBUNWIND_LIB_DIR@/libunwind.a
+ORIG_LIB = libunwind-orig.a
+NEW_LIB = libunwind.a
 
-SUBDIRS = \
-	extern \
-	lib \
-	tool
 
-#############################################################################
-# Other rules
-#############################################################################
+all-local:
+	echo "libunwind: make all ..."
+	rm -f $(ORIG_LIB) $(NEW_LIB)
+	cp $(EXTERN_LIB) $(ORIG_LIB)
+	cp $(ORIG_LIB) $(NEW_LIB)
+	ls -l $(NEW_LIB)
+
+
+clean-local:
+	echo "libunwind: make clean ..."
+	rm -f $(ORIG_LIB) $(NEW_LIB)

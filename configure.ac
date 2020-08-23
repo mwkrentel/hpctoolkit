@@ -2719,8 +2719,12 @@ case "$LIBUNWIND" in
       fi
       if test -f "${ldir}/libunwind.a" ; then
         LIBUNWIND_LDFLAGS_STAT="${ldir}/libunwind.a"
+	LIBUNWIND_LIB_DIR="$ldir"
 	libunwind_exists=yes
 	libunwind_static=yes
+      fi
+      if test "$libunwind_exists" = yes ; then
+        break
       fi
     done
     if test "$libunwind_exists" != yes ; then
@@ -2774,9 +2778,18 @@ fi
 
 AC_MSG_NOTICE([libunwind.a compiled with -fPIC: $libunwind_fpic])
 
+# libunwind is only used in hpcrun, so if fpic exists, then don't need
+# to copy.
 if test "$libunwind_fpic" = yes ; then
-  LIBUNWIND_LDFLAGS_DYN="$LIBUNWIND_LDFLAGS_STAT"
   LIBUNWIND_COPY=no
+fi
+
+#
+# Report a warning if not using an fpic archive.
+#
+missing_fpic=
+if test "$libunwind_fpic" != yes ; then
+  missing_fpic="$missing_fpic libunwind"
 fi
 
 unwinder_mesg="$UNWINDER"
@@ -2805,6 +2818,9 @@ AM_CONDITIONAL([UNW_X86], [test "$UNWINDER" = x86-family])
 AM_CONDITIONAL([UNW_PPC64], [test "$UNWINDER" = ppc64])
 AM_CONDITIONAL([UNW_LIBUNW], [test "$UNWINDER" = libunw])
 
+AM_CONDITIONAL(OPT_LIBUNWIND_STATIC, [test "$libunwind_static" = yes])
+AM_CONDITIONAL(OPT_LIBUNWIND_STATIC_FPIC, [test "$libunwind_fpic" = yes])
+
 
 #-------------------------------------------------
 # Option: --with-lzma=PATH
@@ -2815,6 +2831,10 @@ AM_CONDITIONAL([UNW_LIBUNW], [test "$UNWINDER" = libunw])
 #  1. liblzma exists (headers + .so) for dynamic case.
 #  2. static archive liblzma.a exists for static case.
 #  3. archive compiled with -fPIC for link into libhpcrun.so.
+#
+# Note: lzma is also used in prof-mpi (via support-lean), not just in
+# hpcrun, so we also need "normal" usage, not just fPIC archive for
+# hiding.
 #
 
 LZMA="$default_lzma_prefix"
@@ -2861,8 +2881,12 @@ case "$LZMA" in
       fi
       if test -f "${ldir}/liblzma.a" ; then
         LZMA_LDFLAGS_STAT="${ldir}/liblzma.a"
+	LZMA_LIB_DIR="$ldir"
         lzma_exists=yes
 	lzma_static=yes
+      fi
+      if test "$lzma_exists" = yes ; then
+        break
       fi
     done
     if test "$lzma_exists" != yes ; then
@@ -2915,9 +2939,8 @@ fi
 
 AC_MSG_NOTICE([lzma.a compiled with -fPIC: $lzma_fpic])
 
-if test "$lzma_fpic" = yes ; then
-  LZMA_LDFLAGS_DYN="$LZMA_LDFLAGS_STAT"
-  LZMA_COPY=no
+if test "$lzma_fpic" != yes ; then
+  missing_fpic="$missing_fpic lzma"
 fi
 
 #
@@ -2936,6 +2959,14 @@ AC_SUBST([LZMA_LDFLAGS_STAT])
 AC_SUBST([LZMA_PROF_MPI_LIBS])
 AC_SUBST([LZMA_COPY])
 AC_SUBST([LZMA_LIB_DIR])
+
+# Libunwind calls lzma.  If we statically link lzma int hpcrun but
+# dynamically link libuwnind, then we get two copies of lzma.  So,
+# linking lzma requires linking libunwind.
+
+AM_CONDITIONAL(OPT_LZMA_STATIC, [test "$lzma_static" = yes])
+AM_CONDITIONAL(OPT_LZMA_STATIC_FPIC,
+    [test "$lzma_fpic" = yes && test "$libunwind_fpic" = yes])
 
 
 #-------------------------------------------------
@@ -5028,6 +5059,9 @@ AC_CONFIG_FILES([ \
   lib/Makefile \
   \
   src/Makefile \
+  src/extern/Makefile \
+  src/extern/libunwind/Makefile \
+  src/extern/lzma/Makefile \
   src/tool/Makefile \
   src/tool/hpcfnbounds/Makefile \
   src/tool/hpcfnbounds2/Makefile \
@@ -5195,6 +5229,16 @@ if test "$warn_bgq_backend" = yes ; then
   AC_MSG_NOTICE([Note: HPCToolkit is configured for Blue Gene/Q back end.])
   AC_MSG_NOTICE([If you wanted to build for the front end (regular powerpc),])
   AC_MSG_NOTICE([then re-run configure with '--disable-bgq'.])
+fi
+
+if test "x$missing_fpic" != x ; then
+  AC_MSG_NOTICE([])
+  AC_MSG_WARN([The following prereqs are missing an archive (.a) compiled with -fPIC.])
+  AC_MSG_WARN([  $missing_fpic])
+  AC_MSG_WARN([])
+  AC_MSG_WARN([hpcrun is unable to properly hide these libraries from the])
+  AC_MSG_WARN([application and this may cause deadlock or segfault.])
+  AC_MSG_WARN([Recompile the above libraries with -fPIC (+pic in spack).])
 fi
 
 if test "$warn_papi_mismatch" = yes ; then

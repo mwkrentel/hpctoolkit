@@ -44,31 +44,25 @@
 ##
 ## ******************************************************* EndRiceCopyright *
 
-#############################################################################
-##
-## File:
-##   $HeadURL$
-##
-## Description:
-##   *Process with automake to produce Makefile.in*
-##
-##   Note: All local variables are prefixed with MY to prevent name
-##   clashes with automatic automake variables.
-##
-#############################################################################
+# The src/extern directory is for modifying 3rd-party libraries for
+# hpcrun: libunwind, lzma, etc.  This is for renaming symbols,
+# stripping debug sections, etc.
+#
+# We copy the original library into the build directory, unpack the
+# archive, use objcopy to modify the members, repack the archive and
+# then leave it for linking into hpcrun.
 
-# We do not want the standard GNU files (NEWS README AUTHORS ChangeLog...)
+#----------------------------------------------------------------------
+
 AUTOMAKE_OPTIONS = foreign
 
-#############################################################################
-# Automake rules
-#############################################################################
+SUBDIRS =
 
-SUBDIRS = \
-	extern \
-	lib \
-	tool
+if OPT_LIBUNWIND_STATIC
+    SUBDIRS += libunwind
+endif
 
-#############################################################################
-# Other rules
-#############################################################################
+if OPT_LZMA_STATIC
+    SUBDIRS += lzma
+endif
+

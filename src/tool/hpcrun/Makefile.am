@@ -711,18 +711,21 @@ libhpcrun_mpi_la_CFLAGS = $(CFLAGS) $(HOST_CFLAGS)
 # ldflags
 #-----------------------------------------------------------
 
-libhpcrun_la_LIBADD = $(HPCLIB_ProfLean) $(HPCLIB_SupportLean)
-libhpcrun_o_LDADD   = $(HPCLIB_ProfLean) $(HPCLIB_SupportLean)
+# The noinst_LTLIBRARIES always build with -fPIC and can be linked
+# into both libhpcrun.o and libhpcrun.so.  For strange technical
+# reasons, the .la version doesn't seem to work (libtool doesn't obey
+# the given order).  This only applies to hpcrun, not struct or prof.
 
-if OPT_BGQ_BACKEND
-  libhpcrun_la_LIBADD += utilities/bgq-cnk/libhardware-thread-id.la
-  libhpcrun_o_LDADD   += utilities/bgq-cnk/libhardware-thread-id.la
-endif
+PROF_LEAN_A = $(top_builddir)/src/lib/prof-lean/.libs/libHPCprof-lean.a
+SUPPORT_LEAN_A = $(top_builddir)/src/lib/support-lean/.libs/libHPCsupport-lean.a
 
-libhpcrun_la_LDFLAGS = -Wl,-Bsymbolic 	\
-	-L$(LIBMONITOR_LIB) -lmonitor -lpthread -lrt -lelf -L$(LIBELF_LIB)  \
-        $(LIBUNWIND_LDFLAGS_DYN) $(LZMA_LDFLAGS_DYN) \
-        $(PERFMON_LDFLAGS_DYN) $(MBEDTLS_LIBS) $(OPT_ROCM_LDFLAGS)
+# Modified versions of the external archives.  The static case works
+# with or without -fPIC, but the dynamic case requies -fPIC.
+
+OUR_LIBUNWIND_A = $(top_builddir)/src/extern/libunwind/libunwind.a
+OUR_LZMA_A = $(top_builddir)/src/extern/lzma/liblzma.a
+
+libhpcrun_la_LDFLAGS = -Wl,-Bsymbolic
 
 libhpcrun_ga_la_LDFLAGS = -Wl,-Bsymbolic
 
@@ -734,13 +737,37 @@ libhpcrun_pthread_la_LDFLAGS = -Wl,-Bsymbolic
 
 libhpcrun_mpi_la_LDFLAGS = -Wl,-Bsymbolic
 
-libhpcrun_o_LDFLAGS = $(LIBUNWIND_LDFLAGS_STAT) \
-	$(LZMA_LDFLAGS_STAT)  \
-	$(PERFMON_LDFLAGS_STAT)
+libhpcrun_o_LDFLAGS =
 
-if OPT_USE_ZLIB
-#  libhpcrun_o_LDFLAGS   += $(ZLIB_HPCLINK_LIB)
+libhpcrun_la_LIBADD =  \
+	$(PROF_LEAN_A)  \
+	$(SUPPORT_LEAN_A)  \
+	-L$(LIBMONITOR_LIB) -lmonitor  \
+	-lpthread -lrt  \
+	-L$(LIBELF_LIB) -lelf  \
+	$(PERFMON_LDFLAGS_DYN)  \
+	$(OPT_ROCM_LDFLAGS)  \
+	$(MBEDTLS_LIBS)
+
+if OPT_LIBUNWIND_STATIC_FPIC
+    libhpcrun_la_LIBADD += $(OUR_LIBUNWIND_A)
+else
+    libhpcrun_la_LIBADD += $(LIBUNWIND_LDFLAGS_DYN)
 endif
+if OPT_LZMA_STATIC_FPIC
+    libhpcrun_la_LIBADD += $(OUR_LZMA_A)
+else
+    libhpcrun_la_LIBADD += $(LZMA_LDFLAGS_DYN)
+endif
+
+libhpcrun_o_LDADD =  \
+	$(PROF_LEAN_A)  \
+	$(SUPPORT_LEAN_A)  \
+	$(PERFMON_LDFLAGS_STAT)  \
+	$(MBEDTLS_LIBS)  \
+	$(OUR_LIBUNWIND_A)  \
+	$(OUR_LZMA_A)
+
 
 #-----------------------------------------------------------
 # whirled peas
