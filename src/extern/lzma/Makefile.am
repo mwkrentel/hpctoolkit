@@ -44,7 +44,10 @@
 ##
 ## ******************************************************* EndRiceCopyright *
 
-# Modify liblzma.a.  For now, just copy from input directory.
+# Modify lzma.a for use inside libhpcrun.
+#
+#  1. Redefine symbol names so that hpcrun can provide a better real
+#  version.  For example: mmap --> hpcrun_real_mmap
 
 #----------------------------------------------------------------------
 
@@ -54,15 +57,21 @@ EXTERN_LIB = @LZMA_LIB_DIR@/liblzma.a
 ORIG_LIB = liblzma-orig.a
 NEW_LIB = liblzma.a
 
+OBJCOPY = objcopy
+
+SYMBOL_NAMES = mmap munmap
+
+REDEFINE_ARGS = $(foreach name,$(SYMBOL_NAMES),--redefine-sym $(name)=hpcrun_real_$(name))
+
+#----------------------------------------------------------------------
 
 all-local:
-	echo "lzma: make all ..."
+	@echo "lzma: make all ..."
+	@echo "symbols:" $(SYMBOL_NAMES)
 	rm -f $(ORIG_LIB) $(NEW_LIB)
 	cp $(EXTERN_LIB) $(ORIG_LIB)
-	cp $(ORIG_LIB) $(NEW_LIB)
-	ls -l $(NEW_LIB)
-
+	$(OBJCOPY) $(REDEFINE_ARGS) $(ORIG_LIB) $(NEW_LIB)
+	ls -l $(ORIG_LIB) $(NEW_LIB)
 
 clean-local:
-	echo "lzma: make clean ..."
 	rm -f $(ORIG_LIB) $(NEW_LIB)

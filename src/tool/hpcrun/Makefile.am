@@ -332,8 +332,6 @@ MY_BASE_FILES =				\
 	cct/cct-node-vector.c     \
 	\
 	cct2metrics.c                   \
-##	\
-##	trampoline/common/trampoline.c  \
 	\
 	lush/lush-backtrace.h lush/lush-backtrace.c \
 	lush/lush.h lush/lush.c	\
@@ -390,6 +388,8 @@ MY_BASE_FILES =				\
 	ompt/ompt-task.c                \
 	ompt/ompt-thread.c              \
 	\
+	extern-real/mmap.c		\
+	\
 	syscalls/poll.c	\
 	syscalls/ppoll.c \
 	syscalls/select.c \
@@ -403,6 +403,7 @@ MY_BASE_FILES =				\
 	utilities/unlink.h utilities/unlink.c
 
 # 	gpu/gpu-api.c
+#	trampoline/common/trampoline.c
 
 if HOST_CPU_PPC
 MY_BASE_FILES +=			\
