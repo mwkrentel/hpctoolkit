@@ -47,24 +47,27 @@
 // Redefine function calls from external libraries (libunwind) to
 // better hide them from UCX.
 //
-// For now, just the original libc functions.
+// Call the real functions via syscall().
 
 //----------------------------------------------------------------------
 
+#define _GNU_SOURCE  1
+
 #include <sys/types.h>
-#include <sys/mman.h>
-#include <err.h>
+#include <sys/syscall.h>
 #include <errno.h>
-#include <stdio.h>
+#include <unistd.h>
 
 void *
 hpcrun_real_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t offset)
 {
-  return mmap(addr, len, prot, flags, fd, offset);
+  return (void *)
+    syscall((long) SYS_mmap, addr, len, prot, flags, fd, offset);
 }
 
 int
 hpcrun_real_munmap(void *addr, size_t len)
 {
-  return munmap(addr, len);
+  return (int)
+    syscall((long) SYS_munmap, addr, len);
 }
